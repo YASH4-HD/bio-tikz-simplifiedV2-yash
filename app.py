@@ -410,10 +410,11 @@ with main_tabs[1]:
     for i in range(n_items):
         l1, l2, l3, l4 = st.columns(4)
         with l1:
-            # Get the preset list or a default list of 8 generic names
-            default_label = st.session_state.get("preset_labels", [f"Entity {j+1}" for j in range(8)])[i]
-            # Get the preset list or a default list of 8 generic names
-            # Otherwise, use a generic "Entity X" name.
+            # 1. Define the presets variable first
+            presets = st.session_state.get("preset_labels", [f"Entity {j+1}" for j in range(8)])
+
+            
+           # 2. Now use it in the loop
             if i < len(presets):
                 default_label = presets[i]
             else:
