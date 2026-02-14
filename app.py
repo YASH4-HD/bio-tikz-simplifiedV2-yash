@@ -172,7 +172,7 @@ def generate_legend_tikz(legend_items: list[dict[str, str]]) -> str:
         g = int(hex_color[2:4], 16)
         b = int(hex_color[4:6], 16)
 
-        tikz_color = f"{{rgb,255:red,{r};green,{g};blue,{b}}}!25"
+        fill={rgb,255:red,0;green,0;blue,255!25}
 
         lines.append(
             f"\\node[{shape}, draw, {style}, fill={tikz_color}, minimum size=0.45cm] at (0,{round(y,2)}) {{}};"
