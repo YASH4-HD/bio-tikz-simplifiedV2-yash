@@ -424,8 +424,36 @@ with main_tabs[1]:
 
         legend_items.append({"label": label, "color": color, "shape": shape, "style": l_style})
 
+        # This replaces your current line 427 and 428
+    st.markdown("### 📍 Generated Legend")
+    
     legend_code = generate_legend_tikz(legend_items)
     st.code(legend_code, language="latex")
+
+    with st.expander("🚀 How to use this in Overleaf / LaTeX"):
+        st.markdown("""
+        **Step 1:** Copy this preamble to the very top of your LaTeX file (only once):
+        """)
+        
+        preamble_code = r"""\documentclass{article}
+\usepackage[svgnames]{xcolor} 
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, shadows, positioning}
+
+\begin{document}
+"""
+        st.code(preamble_code, language="latex")
+        
+        st.markdown("""
+        **Step 2:** Paste the **Generated Legend** code (from the box above) anywhere between `\begin{document}` and `\end{document}`.
+        
+        **Step 3:** Recompile! 
+        """)
+        
+        st.info("💡 Tip: If you want the colors to be darker, change `!25` to `!100` in the code.")
+
+    # Your line 429 (AI Importer) continues below this...
+
             # --- AI IMPORTER SECTION ---
     st.markdown("---")
     st.subheader("🤖 AI-Snippet Importer")
