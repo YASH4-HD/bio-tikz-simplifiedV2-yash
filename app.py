@@ -476,7 +476,7 @@ with main_tabs[1]:
 """)
 
         
-st.info("💡 Tip: If you want the colors to be darker, change `!25` to `!100` in the code.")
+    st.info("💡 Tip: If you want the colors to be darker, change `!25` to `!100` in the code.")
 
     # Your line 429 (AI Importer) continues below this...
 
