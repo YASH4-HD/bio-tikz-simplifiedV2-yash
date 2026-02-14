@@ -425,30 +425,47 @@ with main_tabs[1]:
         legend_items.append({"label": label, "color": color, "shape": shape, "style": l_style})
 
         # This replaces your current line 427 and 428
-    st.markdown("### 📍 Generated Legend")
+        st.markdown("### 📍 Generated Legend")
     
-    legend_code = generate_legend_tikz(legend_items)
-    st.code(legend_code, language="latex")
+    # 1. Get the raw TikZ body
+    legend_body = generate_legend_tikz(legend_items)
+    
+    # 2. Add the Toggle (same as your first image)
+    full_doc_legend = st.toggle("Generate full .tex document for legend", value=False, key="legend_toggle")
 
+    if full_doc_legend:
+        # Wrap in full standalone document
+        final_legend_output = rf"""\documentclass[tikz,border=10pt]{{standalone}}
+\usepackage[svgnames]{{xcolor}}
+\usetikzlibrary{{shapes.geometric, positioning}}
+
+\begin{{document}}
+
+{legend_body}
+
+\end{{document}}"""
+    else:
+        # Just the TikZ snippet
+        final_legend_output = legend_body
+
+    # 3. Display the code
+    st.code(final_legend_output, language="latex")
+    
+    # 4. Add Download Button
+    st.download_button(
+        label="Download Legend .tex file",
+        data=final_legend_output,
+        file_name="bio_legend.tex",
+        mime="text/x-tex",
+    )
+
+    # 5. Keep the expander below for quick help
     with st.expander("🚀 How to use this in Overleaf / LaTeX"):
         st.markdown("""
-        **Step 1:** Copy this preamble to the very top of your LaTeX file (only once):
+        **Option A:** If you downloaded the full .tex, simply upload it to Overleaf.
+        **Option B:** If copying the snippet, ensure your preamble has `\usepackage[svgnames]{xcolor}`.
         """)
-        
-        preamble_code = r"""\documentclass{article}
-\usepackage[svgnames]{xcolor} 
-\usepackage{tikz}
-\usetikzlibrary{shapes.geometric, arrows.meta, shadows, positioning}
 
-\begin{document}
-"""
-        st.code(preamble_code, language="latex")
-        
-        st.markdown("""
-        **Step 2:** Paste the **Generated Legend** code (from the box above) anywhere between `\ begin{document}` and `\end{document}`.
-        
-        **Step 3:** Recompile! 
-        """)
         
         st.info("💡 Tip: If you want the colors to be darker, change `!25` to `!100` in the code.")
 
