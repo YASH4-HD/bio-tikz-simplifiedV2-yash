@@ -459,11 +459,10 @@ with main_tabs[1]:
         mime="text/x-tex",
     )
 
-    # 5. Keep the expander below for quick help
-       with st.expander("🚀 How to use this in Overleaf / LaTeX"):
+        # 5. Keep the expander below for quick help
+    with st.expander("🚀 How to use this in Overleaf / LaTeX"):
         st.markdown("**Step 1:** Copy this preamble to the very top of your LaTeX file:")
         
-        # This puts the LaTeX in a black copyable box
         st.code(r"""\documentclass{article}
 \usepackage[svgnames]{xcolor}
 \usepackage{tikz}
@@ -472,12 +471,11 @@ with main_tabs[1]:
 \begin{document}""", language="latex")
         
         st.markdown(r"""
-**Option A:** If you downloaded the full .tex, simply upload it to Overleaf.  
+**Option A:** If you downloaded the full .tex, simply upload it to Overleaf.
 **Option B:** If copying the snippet, ensure your preamble has `\usepackage[svgnames]{xcolor}`.
-        """)
+""")
         
         st.info("💡 Tip: If you want the colors to be darker, change `!25` to `!100` in the code.")
-
 
     # Your line 429 (AI Importer) continues below this...
 
