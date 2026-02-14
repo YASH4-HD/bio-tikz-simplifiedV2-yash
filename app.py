@@ -491,7 +491,7 @@ with main_tabs[1]:
         key="ai_importer_unique"
     )
     
-        if ai_raw_code:
+    if ai_raw_code:
         # STEP 1: Clean the input
         clean_ai_body = ai_raw_code
         if r"\begin{document}" in ai_raw_code:
