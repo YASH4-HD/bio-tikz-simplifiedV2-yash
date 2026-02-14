@@ -258,7 +258,195 @@ def build_project_payload(state: dict) -> str:
 
 def load_project_payload(uploaded_project) -> dict:
     return json.loads(uploaded_project.read().decode("utf-8"))
+RELATION_STYLES = {
+    "Activation": {"arrow": "->", "style": "thick, ForestGreen", "legend": "Activation"},
+    "Inhibition": {"arrow": "-|", "style": "thick, BrickRed", "legend": "Inhibition"},
+    "Phosphorylation": {"arrow": "->", "style": "thick, RoyalBlue", "legend": "Phosphorylation (P)"},
+    "Ubiquitination": {"arrow": "->", "style": "thick, Orange", "legend": "Ubiquitination (Ub)"},
+    "Translocation": {"arrow": "->", "style": "dashed, thick, Purple", "legend": "Translocation"},
+    "Cleavage": {"arrow": "->", "style": "densely dotted, thick, Gray", "legend": "Cleavage"},
+}
 
+
+def parse_csv_lines(raw_text: str) -> list[list[str]]:
+    rows = []
+    for line in raw_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        rows.append([chunk.strip() for chunk in stripped.split(",")])
+    return rows
+
+
+def build_mechanistic_tikz(nodes: list[str], edges: list[dict]) -> str:
+    if not nodes:
+        return "% Add nodes first"
+
+    lines = [r"\begin{tikzpicture}[node distance=2.4cm, every node/.style={font=\small}]", ""]
+    x_pos = 0
+    for idx, node in enumerate(nodes):
+        lines.append(
+            f"\\node[circle, draw, fill=blue!10, minimum size=1.5cm] ({node}) at ({x_pos},0) {{{node}}};"
+        )
+        x_pos += 3.0
+
+    lines.append("")
+    for edge in edges:
+        relation = edge["relation"]
+        style = RELATION_STYLES.get(relation, RELATION_STYLES["Activation"])
+        evidence = edge.get("evidence", "hypothesis")
+        tag = "[validated]" if evidence == "validated" else "[lit]" if evidence == "literature-supported" else "[hyp]"
+        annotation = "P" if relation == "Phosphorylation" else "Ub" if relation == "Ubiquitination" else ""
+        lines.append(
+            f"\\draw[{style['style']}, {style['arrow']}] ({edge['source']}) -- ({edge['target']}) node[midway, above] {{{tag} {annotation}}};"
+        )
+
+    lines.append(r"\end{tikzpicture}")
+    return "\n".join(lines)
+
+
+def ontology_validate_edges(edges: list[dict]) -> list[str]:
+    warnings = []
+    for edge in edges:
+        src = edge["source"].lower()
+        dst = edge["target"].lower()
+        relation = edge["relation"]
+
+        if "receptor" in src and "nucleus" in dst and relation != "Translocation":
+            warnings.append(f"{edge['source']} -> {edge['target']}: add a translocation step before nuclear entry.")
+
+        if relation == "Phosphorylation" and "dna" in dst:
+            warnings.append(f"{edge['source']} -> {edge['target']}: phosphorylation usually targets proteins, not DNA.")
+
+        if edge.get("evidence") == "hypothesis":
+            warnings.append(f"{edge['source']} -> {edge['target']}: mark references for hypothesis-only edges.")
+
+    return warnings
+
+
+def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    hex_color = hex_color.lstrip("#")
+    return int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+
+
+def contrast_score(hex_a: str, hex_b: str) -> float:
+    r1, g1, b1 = hex_to_rgb(hex_a)
+    r2, g2, b2 = hex_to_rgb(hex_b)
+    return round((abs(r1 - r2) + abs(g1 - g2) + abs(b1 - b2)) / 7.65, 2)
+
+
+def submission_readiness_score(fonts: int, line_styles: int, palette: list[str], target_dpi: int) -> tuple[float, list[str]]:
+    checks = []
+    score = 100.0
+
+    if fonts > 2:
+        score -= 12
+        checks.append("Reduce font families to <=2 for consistency.")
+    if line_styles > 3:
+        score -= 10
+        checks.append("Use <=3 line styles to reduce cognitive load.")
+    if target_dpi < 300:
+        score -= 20
+        checks.append("Increase export DPI to at least 300 for journals.")
+
+    if len(palette) >= 2:
+        min_contrast = min(contrast_score(palette[i], palette[i + 1]) for i in range(len(palette) - 1))
+        if min_contrast < 35:
+            score -= 18
+            checks.append("Increase contrast between adjacent palette colors.")
+
+    if not checks:
+        checks.append("Looks publication-ready. Validate panel labels at print scale.")
+
+    return max(0.0, round(score, 2)), checks
+
+
+def ai_scene_from_prompt(prompt: str) -> tuple[list[str], list[dict], list[str]]:
+    p = prompt.lower()
+    nodes = ["Ligand", "Receptor", "MAPK", "Nucleus"]
+    edges = [
+        {"source": "Ligand", "target": "Receptor", "relation": "Activation", "evidence": "hypothesis"},
+        {"source": "Receptor", "target": "MAPK", "relation": "Activation", "evidence": "hypothesis"},
+        {"source": "MAPK", "target": "Nucleus", "relation": "Translocation", "evidence": "hypothesis"},
+    ]
+    assumptions = ["Generated with heuristic prompt parsing.", "Please validate every edge with literature."]
+
+    if "pd-1" in p or "inhibitory" in p:
+        nodes.append("PD-1")
+        edges.append({"source": "PD-1", "target": "Receptor", "relation": "Inhibition", "evidence": "hypothesis"})
+    if "phosph" in p:
+        edges.append({"source": "Receptor", "target": "MAPK", "relation": "Phosphorylation", "evidence": "hypothesis"})
+    if "crispr" in p:
+        nodes = ["gRNA", "Cas9", "TargetDNA"]
+        edges = [
+            {"source": "gRNA", "target": "Cas9", "relation": "Activation", "evidence": "hypothesis"},
+            {"source": "Cas9", "target": "TargetDNA", "relation": "Cleavage", "evidence": "hypothesis"},
+        ]
+        assumptions.append("CRISPR template chosen due to prompt keyword.")
+
+    return nodes, edges, assumptions
+
+
+def build_time_series_tikz(states: list[str]) -> str:
+    lines = [r"\begin{tikzpicture}[>=Stealth, node distance=2.8cm]", ""]
+    x = 0
+    for idx, state in enumerate(states):
+        node_name = f"s{idx}"
+        lines.append(f"\\node[rectangle, draw, rounded corners, fill=teal!10, minimum width=2.7cm, minimum height=0.9cm] ({node_name}) at ({x},0) {{{state}}};")
+        if idx > 0:
+            lines.append(f"\\draw[->, thick] (s{idx-1}) -- ({node_name});")
+        x += 3.6
+    lines.append(r"\end{tikzpicture}")
+    return "\n".join(lines)
+
+
+def organelle_tikz(organelle: str, intensity: int, variant: str) -> str:
+    if organelle == "Mitochondria":
+        return rf"""\begin{{tikzpicture}}
+\draw[thick] (0,0) ellipse (3 and 1.5);
+\foreach \x in {{-{intensity/12:.2f},0,{intensity/12:.2f}}} {{
+  \draw[thick] (-2.2+\x,0) .. controls (-1.7,0.6) and (-0.8,0.6) .. (-0.3,0)
+  .. controls (0.2,-0.6) and (1.1,-0.6) .. (1.8,0);
+}}
+\node at (0,-2) {{{variant}}};
+\end{{tikzpicture}}"""
+    if organelle == "Golgi":
+        return rf"""\begin{{tikzpicture}}
+\foreach \i in {{0,...,4}} {{
+  \draw[thick] (-2+0.25*\i,0.35*\i) to[out=15,in=165] (2-0.25*\i,0.35*\i);
+}}
+\node at (0,-0.8) {{{variant}}};
+\end{{tikzpicture}}"""
+    if organelle == "Lipid Bilayer":
+        return rf"""\begin{{tikzpicture}}
+\foreach \x in {{-3,-2.5,...,3}} {{
+  \draw[fill=blue!30] (\x,0.5) circle (0.1);
+  \draw[fill=blue!30] (\x,-0.5) circle (0.1);
+  \draw[thick] (\x,0.4) -- (\x,-0.4);
+}}
+\node[draw, fill=orange!20] at (0,0) {{Protein x{max(1, intensity//20)}}};
+\node at (0,-1.2) {{{variant}}};
+\end{{tikzpicture}}"""
+    return rf"""\begin{{tikzpicture}}
+\draw[thick] (0,0) circle (1.6);
+\draw[dashed] (0,0) circle ({0.6 + intensity/100:.2f});
+\node at (0,-2) {{{variant}}};
+\end{{tikzpicture}}"""
+
+
+def collaboration_report(comment_rows: list[list[str]]) -> str:
+    lines = ["# Collaboration Review", ""]
+    approvals = 0
+    for row in comment_rows:
+        if len(row) < 4:
+            continue
+        reviewer, node, status, note = row[0], row[1], row[2], row[3]
+        if status.lower() == "approve":
+            approvals += 1
+        lines.append(f"- **{reviewer}** on `{node}` | {status.upper()}: {note}")
+    lines.append("")
+    lines.append(f"Approved items: {approvals}")
+    return "\n".join(lines)
 
 st.title("🔬 Bio-TikZ Studio | End-to-End Figure Production")
 st.caption("Phase 1 + 2 + 3 features: conversion, design, accessibility, composition, packaging, and workflow automation")
@@ -272,6 +460,7 @@ main_tabs = st.tabs(
         "🧩 Panel Composer",
         "📦 Workspace + Export Pack",
         "🏆 Design Strategy",
+        "🚀 Extraordinary Lab",
     ]
 )
 
@@ -711,6 +900,120 @@ with main_tabs[5]:
         file_name="award_winning_design_brief.md",
         mime="text/markdown",
     )
+with main_tabs[6]:
+    st.header("Extraordinary Lab: All 10 Advanced Features")
 
+    st.subheader("1) Mechanistic Connector 2.0")
+    n_nodes = st.slider("Number of nodes", 2, 8, 4, key="mech_nodes")
+    node_names = [st.text_input(f"Node {i+1}", value=v, key=f"node_{i}") for i, v in enumerate(["Ligand", "Receptor", "MAPK", "Nucleus", "Gene", "Protein", "Cytokine", "Membrane"][:n_nodes])]
+    n_edges = st.slider("Number of relations", 1, 12, 3, key="mech_edges")
+    edge_rows = []
+    for i in range(n_edges):
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            src = st.selectbox(f"From {i+1}", node_names, key=f"src_{i}")
+        with c2:
+            dst = st.selectbox(f"To {i+1}", node_names, index=min(1, len(node_names)-1), key=f"dst_{i}")
+        with c3:
+            rel = st.selectbox(f"Type {i+1}", list(RELATION_STYLES.keys()), key=f"rel_{i}")
+        with c4:
+            ev = st.selectbox(f"Evidence {i+1}", ["hypothesis", "literature-supported", "validated"], key=f"ev_{i}")
+        edge_rows.append({"source": src, "target": dst, "relation": rel, "evidence": ev})
+
+    mech_tikz = build_mechanistic_tikz(node_names, edge_rows)
+    st.code(mech_tikz, language="latex")
+
+    st.subheader("2) Ontology-Aware Auto-Validation")
+    issues = ontology_validate_edges(edge_rows)
+    if issues:
+        for issue in issues:
+            st.warning(issue)
+    else:
+        st.success("No obvious ontology or mechanistic warnings found.")
+
+    st.subheader("3) Figure Quality Auditor (Submission Readiness)")
+    qa1, qa2, qa3 = st.columns(3)
+    with qa1:
+        font_count = st.number_input("Font families used", 1, 10, 2)
+    with qa2:
+        line_styles_count = st.number_input("Line style count", 1, 10, 3)
+    with qa3:
+        target_dpi = st.number_input("Target DPI", 72, 1200, 300)
+    palette_text = st.text_input("Palette hex list (comma separated)", "#1f77b4,#ff7f0e,#2ca02c")
+    palette = [x.strip() for x in palette_text.split(",") if x.strip()]
+    readiness, fixes = submission_readiness_score(int(font_count), int(line_styles_count), palette, int(target_dpi))
+    st.metric("Submission Readiness", f"{readiness}/100")
+    for fix in fixes:
+        st.write(f"- {fix}")
+
+    st.subheader("4) AI-to-TikZ Biological Scene Generator")
+    ai_prompt = st.text_area("Describe pathway", "Draw TCR signaling with inhibitory PD-1 branch and downstream NFAT blockade.")
+    ai_nodes, ai_edges, ai_assumptions = ai_scene_from_prompt(ai_prompt)
+    st.json({"nodes": ai_nodes, "edges": ai_edges, "assumptions": ai_assumptions})
+    st.code(build_mechanistic_tikz(ai_nodes, ai_edges), language="latex")
+
+    st.subheader("5) Time-Series / State-Transition Diagram Mode")
+    states_raw = st.text_input("States (comma separated)", "Baseline,Stimulation,Inhibition,Recovery")
+    states = [s.strip() for s in states_raw.split(",") if s.strip()]
+    st.code(build_time_series_tikz(states), language="latex")
+
+    st.subheader("6) Reproducible Figure Projects (Versioned)")
+    project_state = {
+        "timestamp": datetime.now().isoformat(),
+        "nodes": node_names,
+        "edges": edge_rows,
+        "readiness": readiness,
+        "fixes": fixes,
+    }
+    st.download_button("Download versioned project JSON", build_project_payload(project_state), "versioned_figure_project.json", "application/json")
+
+    st.subheader("7) Parametric Bio-Library")
+    o1, o2, o3 = st.columns(3)
+    with o1:
+        organelle = st.selectbox("Organelle", ["Mitochondria", "Golgi", "Lipid Bilayer", "Nucleus"])
+    with o2:
+        intensity = st.slider("Complexity / density", 10, 100, 50)
+    with o3:
+        variant = st.text_input("Variant label", "WT")
+    st.code(organelle_tikz(organelle, intensity, variant), language="latex")
+
+    st.subheader("8) Experimental Data Overlay")
+    overlay_raw = st.text_area("Node,fold_change,p_value (CSV lines)", "Receptor,2.4,0.001\nMAPK,1.6,0.02\nNucleus,0.7,0.18")
+    overlay_rows = parse_csv_lines(overlay_raw)
+    if overlay_rows:
+        st.dataframe([
+            {"Node": r[0], "FoldChange": float(r[1]) if len(r) > 1 else 0.0, "p_value": float(r[2]) if len(r) > 2 else 1.0}
+            for r in overlay_rows if len(r) >= 3
+        ])
+
+    st.subheader("9) Portfolio / Showcase Export Mode")
+    portfolio_md = f"""# Bio-TikZ Case Study
+
+- Created: {datetime.now().isoformat()}
+- Mechanistic nodes: {len(node_names)}
+- Relations: {len(edge_rows)}
+- Submission score: {readiness}/100
+
+## Methods
+Generated with Bio-TikZ Studio extraordinary workflow with semantic connectors, QA checks, and reproducible config export.
+"""
+    portfolio_zip = build_zip([
+        ("mechanism.tex", mech_tikz.encode("utf-8")),
+        ("timeseries.tex", build_time_series_tikz(states).encode("utf-8")),
+        ("organelle_template.tex", organelle_tikz(organelle, intensity, variant).encode("utf-8")),
+        ("case_study.md", portfolio_md.encode("utf-8")),
+        ("project.json", build_project_payload(project_state).encode("utf-8")),
+    ])
+    st.download_button("Download Portfolio Bundle ZIP", portfolio_zip, "portfolio_bundle.zip", "application/zip")
+
+    st.subheader("10) Collaboration Workflow")
+    comment_csv = st.text_area(
+        "reviewer,node,status,note (CSV lines)",
+        "PI,Receptor,approve,Clear signal start\nReviewer1,MAPK,changes,Need evidence citation\nReviewer2,Nucleus,approve,Looks good",
+    )
+    comments = parse_csv_lines(comment_csv)
+    review_md = collaboration_report(comments)
+    st.code(review_md, language="markdown")
+    st.download_button("Download collaboration report", review_md, "collaboration_review.md", "text/markdown")
 st.markdown("---")
 st.caption("Developed by Yashwant Nama | PhD Research Portfolio Project")
