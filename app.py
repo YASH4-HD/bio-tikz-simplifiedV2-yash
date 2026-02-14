@@ -517,6 +517,7 @@ main_tabs = st.tabs(
         "🏆 Design Strategy",
         "🚀 Extraordinary Lab",
         "🧫 Publication Panels",
+        "📊 Scientific Plot Generator",
     ]
 )
 
