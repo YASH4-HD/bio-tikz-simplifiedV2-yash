@@ -492,19 +492,24 @@ with main_tabs[1]:
     )
     
     if ai_raw_code:
-        # STEP 1: Clean the input
-        # If the user pasted the whole Overleaf file, we only want the part between \begin{document} and \end{document}
-        clean_ai_body = ai_raw_code
-        if r"\begin{document}" in ai_raw_code:
-            clean_ai_body = ai_raw_code.split(r"\begin{document}")[-1].split(r"\end{document}")[0]
-        
-        # If they still have \begin{tikzpicture} in there, that's fine, build_full_tikz_document wraps it.
-        
-        # STEP 2: Wrap in the professional preamble
-        ai_final_output = build_full_tikz_document(clean_ai_body)
-        
-        st.markdown("#### ✨ Enhanced Publication-Ready Code")
-        st.code(ai_final_output, language="latex")
+    # STEP 1: Clean the input
+    clean_ai_body = ai_raw_code
+    if r"\begin{document}" in ai_raw_code:
+        clean_ai_body = ai_raw_code.split(r"\begin{document}")[-1].split(r"\end{document}")[0]
+
+    # --- NEW LOGIC START: Ensure tikzpicture environment exists ---
+    if r"\begin{tikzpicture}" not in clean_ai_body:
+        processed_body = f"\\begin{{tikzpicture}}\n{clean_ai_body}\n\\end{{tikzpicture}}"
+    else:
+        processed_body = clean_ai_body
+    # --- NEW LOGIC END ---
+
+    # STEP 2: Wrap in the professional preamble
+    # Pass 'processed_body' instead of 'clean_ai_body'
+    ai_final_output = build_full_tikz_document(processed_body)
+
+    st.markdown("#### ✨ Enhanced Publication-Ready Code")
+    st.code(ai_final_output, language="latex")
         
         # STEP 3: Export
         st.download_button(
