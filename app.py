@@ -410,8 +410,14 @@ with main_tabs[1]:
     for i in range(n_items):
         l1, l2, l3, l4 = st.columns(4)
         with l1:
-            # Check if a preset exists for this index, otherwise use default
+            # Get the preset list or a default list of 8 generic names
             default_label = st.session_state.get("preset_labels", [f"Entity {j+1}" for j in range(8)])[i]
+            # Get the preset list or a default list of 8 generic names
+            # Otherwise, use a generic "Entity X" name.
+            if i < len(presets):
+                default_label = presets[i]
+            else:
+                default_label = f"Entity {i+1}"
             label = st.text_input(f"Label {i+1}", default_label, key=f"lab_{i}")
         with l2:
             # Check if a preset color exists, otherwise use default blue
