@@ -626,8 +626,10 @@ with main_tabs[4]:
     st.subheader("Overleaf Helper Pack")
     overleaf_preamble = r"""% Add to preamble once
 \usepackage{tikz}
-\usetikzlibrary{shadows,arrows.meta,positioning,shapes.geometric}
+\usetikzlibrary{shadows, arrows.meta, positioning, shapes.geometric}
+\usepackage[svgnames]{xcolor}
 """
+
     overleaf_pack = build_zip(
         [
             ("README_Overleaf.md", b"Import snippets from this pack into Overleaf."),
