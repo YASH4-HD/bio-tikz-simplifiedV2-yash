@@ -511,14 +511,14 @@ with main_tabs[1]:
         st.markdown("#### ✨ Enhanced Publication-Ready Code")
         st.code(ai_final_output, language="latex")
             
-            # STEP 3: Export
-            st.download_button(
-                label="Download AI-Enhanced .tex",
-                data=ai_final_output,
-                file_name="ai_generated_figure.tex",
-                mime="text/x-tex",
-                key="ai_download_unique"
-            )
+        # STEP 3: Export
+        st.download_button(
+            label="Download AI-Enhanced .tex",
+            data=ai_final_output,
+            file_name="ai_generated_figure.tex",
+            mime="text/x-tex",
+            key="ai_download_unique"
+        )
 
     # --- END OF AI IMPORTER ---
 
