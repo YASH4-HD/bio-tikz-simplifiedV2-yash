@@ -160,24 +160,33 @@ def generate_tikz_code(
 def generate_legend_tikz(legend_items: list[dict[str, str]]) -> str:
     lines = [r"\begin{tikzpicture}"]
     y = 0.0
+
     for item in legend_items:
-        color = item["color"].replace("#", "")
+        hex_color = item["color"].lstrip("#")
         label = item["label"]
         shape = item["shape"]
-        style = item.get("style", "solid") # This uses "solid" if "style" is missing
-        
-        # Draw the shape icon with clean rounded coordinates
+        style = item.get("style", "solid")
+
+        # Convert HEX to RGB
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+
+        tikz_color = f"{{rgb,255:red,{r};green,{g};blue,{b}}}!25"
+
         lines.append(
-            f"\\node[{shape}, draw, {style}, fill={{[HTML]{{{color}}}!25}}, minimum size=0.45cm] at (0,{round(y, 2)}) {{}};"
+            f"\\node[{shape}, draw, {style}, fill={tikz_color}, minimum size=0.45cm] at (0,{round(y,2)}) {{}};"
         )
-        # Draw the text label
-        lines.append(f"\\node[anchor=west] at (0.6,{round(y, 2)}) {{{label}}};")
-        
-        # Decrement y for the next row
+
+        lines.append(
+            f"\\node[anchor=west] at (0.6,{round(y,2)}) {{{label}}};"
+        )
+
         y -= 0.8
-        
+
     lines.append(r"\end{tikzpicture}")
     return "\n".join(lines)
+
 
 
 def build_full_tikz_document(tikz_body: str) -> str:
