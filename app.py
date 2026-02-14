@@ -411,18 +411,20 @@ with main_tabs[1]:
         l1, l2, l3, l4 = st.columns(4)
         with l1:
             # 1. Define the presets variable first
-            presets = st.session_state.get("preset_labels", [f"Entity {j+1}" for j in range(8)])
+            preset_labels = st.session_state.get("preset_labels", [])
+            default_label = preset_labels[i] if i < len(preset_labels) else f"Entity {i+1}"
 
             
-           # 2. Now use it in the loop
-            if i < len(presets):
-                default_label = presets[i]
-            else:
-                default_label = f"Entity {i+1}"
+           
+            
+                
+            
+                
             label = st.text_input(f"Label {i+1}", default_label, key=f"lab_{i}")
         with l2:
             # Check if a preset color exists, otherwise use default blue
-            default_color = st.session_state.get("preset_colors", ["#3498db"] * 8)[i]
+            preset_colors = st.session_state.get("preset_colors", [])
+            default_color = preset_colors[i] if i < len(preset_colors) else "#3498db"
             color = st.color_picker(f"Color {i+1}", default_color, key=f"col_{i}")
         with l3:
             shape = st.selectbox(f"Shape {i+1}", ["circle", "rectangle", "ellipse"], key=f"shp_{i}")
