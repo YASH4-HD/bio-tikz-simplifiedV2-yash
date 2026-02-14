@@ -258,6 +258,8 @@ def build_project_payload(state: dict) -> str:
 
 def load_project_payload(uploaded_project) -> dict:
     return json.loads(uploaded_project.read().decode("utf-8"))
+
+
 RELATION_STYLES = {
     "Activation": {"arrow": "->", "style": "thick, ForestGreen", "legend": "Activation"},
     "Inhibition": {"arrow": "-|", "style": "thick, BrickRed", "legend": "Inhibition"},
@@ -447,6 +449,8 @@ def collaboration_report(comment_rows: list[list[str]]) -> str:
     lines.append("")
     lines.append(f"Approved items: {approvals}")
     return "\n".join(lines)
+
+
 def build_chemfig_document(chemfig_code: str, caption: str) -> str:
     lines = [
         r"\documentclass[tikz,border=10pt]{standalone}",
@@ -471,6 +475,37 @@ def build_significance_tikz(x1: float, x2: float, y: float, stars: str, plot_typ
 \draw[thick, fill=green!20] ({x2 - 0.25},{baseline}) rectangle ({x2 + 0.25},{y});
 \draw[stealth-stealth] ({x1},{y + 0.2}) -- node[above]{{{stars}}} ({x2},{y + 0.2});
 \end{{tikzpicture}}"""
+
+
+def build_stat_annotation_overlay_tikz(
+    image_filename: str,
+    panel_label: str,
+    brackets: list[dict[str, float | str]],
+    image_width_cm: float,
+    image_height_cm: float,
+) -> str:
+    lines = [
+        r"\documentclass[tikz,border=2pt]{standalone}",
+        r"\usepackage{graphicx}",
+        r"\usepackage{tikz}",
+        r"\begin{document}",
+        r"\begin{tikzpicture}",
+        rf"\node[anchor=south west, inner sep=0] (img) at (0,0) {{\includegraphics[width={image_width_cm}cm,height={image_height_cm}cm]{{{image_filename}}}}};",
+        rf"\node[anchor=north west, font=\bfseries\fontsize{{18}}{{18}}\selectfont] at (0,{image_height_cm}) {{{panel_label}}};",
+    ]
+
+    for bracket in brackets:
+        x1 = bracket["x1"]
+        x2 = bracket["x2"]
+        y = bracket["y"]
+        rise = bracket["rise"]
+        stars = bracket["stars"]
+        lines.append(
+            rf"\draw[thick] ({x1},{y}) -- ({x1},{y + rise}) -- ({x2},{y + rise}) -- ({x2},{y}) node[midway, above] {{{stars}}};"
+        )
+
+    lines.extend([r"\end{tikzpicture}", r"\end{document}"])
+    return "\n".join(lines)
 
 
 def build_histogram_overlay_tikz(x_steps: int, y_steps: int, title: str) -> str:
@@ -502,6 +537,144 @@ def build_panel_layout_tikz(layout: str, spacing: float, show_labels: bool) -> s
             lines.append(f"\node[anchor=north west, font=\bfseries] at ({x+0.12},{y+1.58}) {{{labels[idx]}}};")
     lines.append(r"\end{tikzpicture}")
     return "\n".join(lines)
+
+
+def _safe_float(value: str, default: float = 0.0) -> float:
+    try:
+        return float(value.strip())
+    except Exception:
+        return default
+
+
+def parse_matrix_text(raw: str, rows: int, cols: int, default: float = 0.0) -> list[list[float]]:
+    parsed = []
+    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    for r in range(rows):
+        vals = [v.strip() for v in lines[r].split(',')] if r < len(lines) else []
+        parsed.append([_safe_float(vals[c], default) if c < len(vals) else default for c in range(cols)])
+    return parsed
+
+
+def generate_grouped_bar_plot_image(categories: list[str], groups: list[str], values: list[list[float]], errors: list[list[float]], width: int = 1200, height: int = 800) -> Image.Image:
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    ml, mr, mt, mb = 110, 60, 60, 120
+    pw, ph = width - ml - mr, height - mt - mb
+    max_y = max(1.0, max(values[g][c] + errors[g][c] for g in range(len(groups)) for c in range(len(categories)))) * 1.15
+
+    draw.line((ml, mt + ph, ml + pw, mt + ph), fill="black", width=3)
+    draw.line((ml, mt, ml, mt + ph), fill="black", width=3)
+
+    for i in range(6):
+        yv = max_y * i / 5
+        y = mt + ph - (yv / max_y) * ph
+        draw.line((ml - 8, y, ml, y), fill="black", width=2)
+        draw.text((15, y - 8), f"{yv:.1f}", fill="black")
+
+    palette = ["#4C78A8", "#F58518", "#54A24B", "#E45756", "#72B7B2", "#B279A2"]
+    cat_span = pw / max(1, len(categories))
+    bar_w = min(38, (cat_span * 0.7) / max(1, len(groups)))
+
+    for c_idx, cat in enumerate(categories):
+        cat_x0 = ml + c_idx * cat_span + cat_span * 0.15
+        for g_idx, grp in enumerate(groups):
+            val = values[g_idx][c_idx]
+            err = errors[g_idx][c_idx]
+            x0 = cat_x0 + g_idx * bar_w
+            x1 = x0 + bar_w * 0.85
+            y1 = mt + ph
+            y0 = y1 - (val / max_y) * ph
+            draw.rectangle((x0, y0, x1, y1), fill=palette[g_idx % len(palette)], outline="black", width=1)
+            if err > 0:
+                ey = (err / max_y) * ph
+                cx = (x0 + x1) / 2
+                draw.line((cx, y0 - ey, cx, y0), fill="black", width=2)
+                draw.line((cx - 7, y0 - ey, cx + 7, y0 - ey), fill="black", width=2)
+        draw.text((cat_x0, mt + ph + 15), cat, fill="black")
+
+    for g_idx, grp in enumerate(groups):
+        lx, ly = ml + g_idx * 190, height - 40
+        col = palette[g_idx % len(palette)]
+        draw.rectangle((lx, ly, lx + 24, ly + 18), fill=col, outline="black")
+        draw.text((lx + 32, ly + 1), grp, fill="black")
+    return img
+
+
+def grouped_bar_pgfplots(categories: list[str], groups: list[str], values: list[list[float]], errors: list[list[float]]) -> str:
+    lines = [r"\begin{tikzpicture}", r"\begin{axis}[ybar,bar width=12pt,width=13cm,height=8cm,legend style={at={(0.5,-0.15)},anchor=north,legend columns=-1},symbolic x coords={" + ",".join(categories) + r"},xtick=data,ymajorgrids=true]"]
+    for g_idx, grp in enumerate(groups):
+        coords = " ".join([f"({categories[c_idx]},{values[g_idx][c_idx]}) +- (0,{errors[g_idx][c_idx]})" for c_idx in range(len(categories))])
+        lines.append(rf"\addplot+[error bars/.cd,y dir=both,y explicit] coordinates {{{coords}}};")
+        lines.append(rf"\addlegendentry{{{grp}}}")
+    lines.extend([r"\end{axis}", r"\end{tikzpicture}"])
+    return "\n".join(lines)
+
+
+def fit_4pl_grid(concentrations: list[float], responses: list[float]) -> dict[str, float]:
+    min_x, max_x = min(concentrations), max(concentrations)
+    min_y, max_y = min(responses), max(responses)
+    best = {"mse": float("inf"), "bottom": min_y, "top": max_y, "ec50": (min_x + max_x) / 2, "hill": 1.0}
+    for b in [min_y - 10, min_y - 5, min_y, min_y + 5]:
+        for t in [max_y - 5, max_y, max_y + 5, max_y + 10]:
+            if t <= b:
+                continue
+            for e in [min_x + (max_x - min_x) * f for f in [0.15, 0.3, 0.5, 0.7, 0.85]]:
+                e = max(1e-8, e)
+                for h in [0.6, 0.8, 1.0, 1.3, 1.6, 2.0]:
+                    preds = [b + (t - b) / (1 + (x / e) ** h) for x in concentrations]
+                    mse = sum((preds[i] - responses[i]) ** 2 for i in range(len(responses))) / len(responses)
+                    if mse < best["mse"]:
+                        best = {"mse": mse, "bottom": b, "top": t, "ec50": e, "hill": h}
+    return best
+
+
+def generate_dose_response_image(concentrations: list[float], responses: list[float], fit: dict[str, float], width: int = 1200, height: int = 800) -> Image.Image:
+    img = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(img)
+    ml, mr, mt, mb = 120, 60, 50, 90
+    pw, ph = width - ml - mr, height - mt - mb
+    min_x, max_x = min(concentrations), max(concentrations)
+    min_y, max_y = min(min(responses), fit["bottom"]), max(max(responses), fit["top"])
+    pad = (max_y - min_y) * 0.15 + 1
+    min_y -= pad
+    max_y += pad
+
+    sx = lambda x: ml + ((x - min_x) / max(1e-9, max_x - min_x)) * pw
+    sy = lambda y: mt + ph - ((y - min_y) / max(1e-9, max_y - min_y)) * ph
+
+    draw.line((ml, mt + ph, ml + pw, mt + ph), fill="black", width=3)
+    draw.line((ml, mt, ml, mt + ph), fill="black", width=3)
+
+    for x, y in zip(concentrations, responses):
+        px, py = sx(x), sy(y)
+        draw.ellipse((px - 6, py - 6, px + 6, py + 6), fill="#1f77b4", outline="black")
+
+    curve = []
+    for i in range(250):
+        x = min_x + (max_x - min_x) * i / 249
+        y = fit["bottom"] + (fit["top"] - fit["bottom"]) / (1 + (x / fit["ec50"]) ** fit["hill"])
+        curve.append((sx(x), sy(y)))
+    draw.line(curve, fill="#d62728", width=3)
+    draw.line((sx(fit["ec50"]), sy(min_y), sx(fit["ec50"]), sy(max_y)), fill="#555555", width=2)
+    draw.text((sx(fit["ec50"]) + 5, sy((fit["bottom"] + fit["top"]) / 2) - 20), f"IC50≈{fit['ec50']:.3g}", fill="black")
+    return img
+
+
+def dose_response_pgfplots(concentrations: list[float], responses: list[float], fit: dict[str, float]) -> str:
+    pts = " ".join([f"({concentrations[i]},{responses[i]})" for i in range(len(concentrations))])
+    lines = [r"\begin{tikzpicture}", r"\begin{semilogxaxis}[width=13cm,height=8cm,xlabel={Concentration},ylabel={% Response},grid=major]", rf"\addplot+[only marks] coordinates {{{pts}}};", rf"\addplot+[domain={min(concentrations)}:{max(concentrations)},samples=120] {{{fit['bottom']} + ({fit['top']}-{fit['bottom']})/(1+(x/{fit['ec50']})^{fit['hill']})}};", rf"\addplot[dashed] coordinates {{({fit['ec50']},{min(responses)-10}) ({fit['ec50']},{max(responses)+10})}};", r"\end{semilogxaxis}", r"\end{tikzpicture}"]
+    return "\n".join(lines)
+
+
+def reaction_scheme_template(title: str, step1: str, step2: str, conditions: str) -> str:
+    return rf"""\begin{{tikzpicture}}[>=Stealth]
+\node[draw, rounded corners, minimum width=3.2cm, minimum height=1.2cm] (a) at (0,0) {{{step1}}};
+\node[draw, rounded corners, minimum width=3.2cm, minimum height=1.2cm] (b) at (7,0) {{{step2}}};
+\draw[->, thick] (a) -- node[above] {{{conditions}}} (b);
+\node[anchor=west, font=\bfseries] at (-1.2,1.8) {{{title}}};
+\node[draw, dashed, minimum width=2.2cm, minimum height=0.8cm] at (3.5,-1.3) {{Label/18F}};
+\end{{tikzpicture}}"""
+
 
 st.title("🔬 Bio-TikZ Studio | End-to-End Figure Production")
 st.caption("Phase 1 + 2 + 3 features: conversion, design, accessibility, composition, packaging, and workflow automation")
@@ -957,6 +1130,7 @@ with main_tabs[5]:
         file_name="award_winning_design_brief.md",
         mime="text/markdown",
     )
+
 with main_tabs[6]:
     st.header("Extraordinary Lab: All 10 Advanced Features")
 
@@ -1072,6 +1246,8 @@ Generated with Bio-TikZ Studio extraordinary workflow with semantic connectors, 
     review_md = collaboration_report(comments)
     st.code(review_md, language="markdown")
     st.download_button("Download collaboration report", review_md, "collaboration_review.md", "text/markdown")
+
+
 with main_tabs[7]:
     st.header("Publication Panels Toolkit (A/B/C/D)")
     st.caption("Implements requested chemical schemes, significance overlays, flow histogram styling, and auto-layout generator.")
@@ -1102,6 +1278,7 @@ with main_tabs[7]:
 
     with panel_tabs[1]:
         st.subheader("Statistical Bar/Line Plot Significance Adder")
+        st.caption("GraphPad/ggplot-style bracket generator + image overlay export for manuscript-ready panel lettering.")
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             x1 = st.number_input("Bar/point 1 x", 0.0, 20.0, 1.0)
@@ -1115,6 +1292,63 @@ with main_tabs[7]:
         sig_tex = build_significance_tikz(x1=x1, x2=x2, y=y_sig, stars=stars, plot_type=plot_type)
         st.code(sig_tex, language="latex")
         st.download_button("Download Significance .tex", sig_tex, "panelBD_significance.tex", "text/x-tex")
+
+        st.markdown("---")
+        st.subheader("Statistical Annotation Overlay (Upload Graph + TikZ Brackets)")
+        uploaded_plot = st.file_uploader(
+            "Upload graph image (PNG/JPG) for overlay",
+            type=["png", "jpg", "jpeg"],
+            key="stat_overlay_uploader",
+        )
+
+        if uploaded_plot is not None:
+            plot_img = Image.open(uploaded_plot).convert("RGB")
+            st.image(plot_img, caption="Uploaded graph for overlay", use_container_width=True)
+
+            o1, o2, o3 = st.columns(3)
+            with o1:
+                panel_label = st.text_input("Panel label", "B")
+            with o2:
+                image_width_cm = st.number_input("Output width (cm)", 4.0, 30.0, 12.0, step=0.5)
+            with o3:
+                image_height_cm = st.number_input("Output height (cm)", 3.0, 30.0, 8.0, step=0.5)
+
+            n_brackets = st.slider("Number of significance brackets", 1, 6, 2, key="n_overlay_brackets")
+            overlay_brackets = []
+            for i in range(n_brackets):
+                b1, b2, b3, b4, b5 = st.columns(5)
+                with b1:
+                    bx1 = st.number_input(f"x1 #{i+1}", 0.0, image_width_cm, 2.0 + i, step=0.1, key=f"ov_x1_{i}")
+                with b2:
+                    bx2 = st.number_input(f"x2 #{i+1}", 0.0, image_width_cm, 4.0 + i, step=0.1, key=f"ov_x2_{i}")
+                with b3:
+                    by = st.number_input(f"y #{i+1}", 0.0, image_height_cm, image_height_cm - 1.5 - i * 0.6, step=0.1, key=f"ov_y_{i}")
+                with b4:
+                    brise = st.number_input(f"rise #{i+1}", 0.1, 2.0, 0.35, step=0.05, key=f"ov_rise_{i}")
+                with b5:
+                    bstars = st.selectbox(f"stars #{i+1}", ["*", "**", "***", "****", "ns"], index=2, key=f"ov_star_{i}")
+                overlay_brackets.append({"x1": bx1, "x2": bx2, "y": by, "rise": brise, "stars": bstars})
+
+            overlay_tex = build_stat_annotation_overlay_tikz(
+                image_filename=uploaded_plot.name,
+                panel_label=panel_label,
+                brackets=overlay_brackets,
+                image_width_cm=float(image_width_cm),
+                image_height_cm=float(image_height_cm),
+            )
+            st.code(overlay_tex, language="latex")
+
+            overlay_zip = build_zip([
+                (uploaded_plot.name, uploaded_plot.getvalue()),
+                ("stat_overlay_panel.tex", overlay_tex.encode("utf-8")),
+                ("README_overlay.txt", b"Place image and .tex in same folder, then compile with pdflatex.")
+            ])
+            st.download_button(
+                "Download Overlay Bundle (Image + .tex)",
+                overlay_zip,
+                "statistical_annotation_overlay_bundle.zip",
+                "application/zip",
+            )
 
     with panel_tabs[2]:
         st.subheader("Flow Cytometry / Histogram Stylist")
@@ -1148,5 +1382,106 @@ with main_tabs[7]:
             ("panel_layout_generator.tex", layout_tex.encode("utf-8")),
         ])
         st.download_button("Download Full Panel Toolkit (ZIP)", combined_zip, "publication_panel_toolkit.zip", "application/zip")
+
+
+with main_tabs[8]:
+    st.header("Scientific Plot Generator")
+    st.caption("Grouped bars, dose-response fitting, flow panel formatter, reaction scheme templates, and auto multi-panel builder.")
+
+    sci_tabs = st.tabs([
+        "Grouped Bar Plot Builder",
+        "Dose-Response Curve Builder",
+        "Flow Cytometry Panel Formatter",
+        "Reaction Scheme Template Library",
+        "Auto Multi-Panel Builder",
+    ])
+
+    with sci_tabs[0]:
+        st.subheader("Grouped Bar Plot Builder")
+        categories_raw = st.text_input("X categories (comma-separated)", "Blood,Heart,Liver")
+        groups_raw = st.text_input("Groups (comma-separated)", "10 min,60 min,120 min")
+        categories = [x.strip() for x in categories_raw.split(",") if x.strip()]
+        groups = [x.strip() for x in groups_raw.split(",") if x.strip()]
+        values_raw = st.text_area("Values matrix", "8,11,15\n12,17,20\n15,20,24", height=110)
+        errors_raw = st.text_area("Error bars matrix", "0.8,1.2,1.0\n1.1,1.0,1.4\n1.4,1.5,1.6", height=110)
+        if categories and groups:
+            values = parse_matrix_text(values_raw, rows=len(groups), cols=len(categories), default=0.0)
+            errors = parse_matrix_text(errors_raw, rows=len(groups), cols=len(categories), default=0.0)
+            gb_img = generate_grouped_bar_plot_image(categories, groups, values, errors)
+            gb_pgf = grouped_bar_pgfplots(categories, groups, values, errors)
+            st.image(gb_img, caption="Publication-style grouped bar plot", use_container_width=True)
+            st.code(gb_pgf, language="latex")
+            st.download_button("Download grouped bar PNG", image_to_png_bytes(gb_img), "grouped_bar_plot.png", "image/png")
+            st.download_button("Download PGFPlots code", gb_pgf, "grouped_bar_plot.tex", "text/x-tex")
+
+    with sci_tabs[1]:
+        st.subheader("Dose-Response Curve Builder (4PL)")
+        conc_raw = st.text_input("Concentrations (comma-separated)", "0.01,0.03,0.1,0.3,1,3,10")
+        resp_raw = st.text_input("% response (comma-separated)", "95,90,80,65,45,25,10")
+        conc = [_safe_float(x, 0.0) for x in conc_raw.split(",") if x.strip()]
+        resp = [_safe_float(x, 0.0) for x in resp_raw.split(",") if x.strip()]
+        if len(conc) >= 4 and len(conc) == len(resp) and min(conc) > 0:
+            fit = fit_4pl_grid(conc, resp)
+            dr_img = generate_dose_response_image(conc, resp, fit)
+            dr_pgf = dose_response_pgfplots(conc, resp, fit)
+            st.metric("Estimated IC50", f"{fit['ec50']:.4g}")
+            st.image(dr_img, caption="Dose-response fit", use_container_width=True)
+            st.code(dr_pgf, language="latex")
+            st.download_button("Download dose-response PNG", image_to_png_bytes(dr_img), "dose_response.png", "image/png")
+            st.download_button("Download PGFPlots code", dr_pgf, "dose_response_curve.tex", "text/x-tex")
+        else:
+            st.info("Provide equal-length concentration/response lists (>=4 points) with positive concentrations.")
+
+    with sci_tabs[2]:
+        st.subheader("Flow Cytometry Panel Formatter")
+        flow_files = st.file_uploader("Upload histogram PNG/JPG images", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="flow_formatter_uploader")
+        cell_line_labels = st.text_input("Cell line labels (comma-separated)", "WT,KO,Rescue")
+        quant_raw = st.text_input("Quantification values (comma-separated)", "35,22,48")
+        if flow_files:
+            imgs = [Image.open(f).convert("RGB") for f in flow_files]
+            tw, th = min(im.width for im in imgs), min(im.height for im in imgs)
+            normalized = [im.resize((tw, th)) for im in imgs]
+            flow_panel = compose_panel(normalized, columns=min(3, len(normalized)), spacing=16, bg_color="#ffffff", add_labels=True, label_color="#000000")
+            st.image(flow_panel, caption="Normalized flow panel", use_container_width=True)
+            labels = [x.strip() for x in cell_line_labels.split(",") if x.strip()]
+            quant = [_safe_float(x, 0.0) for x in quant_raw.split(",") if x.strip()]
+            qcats = labels if labels else [f"Group {i+1}" for i in range(len(quant))]
+            qvals = [quant[:len(qcats)] if quant else [0.0] * len(qcats)]
+            qimg = generate_grouped_bar_plot_image(qcats, ["Quant"], qvals, [[0.0] * len(qcats)], width=1000, height=600)
+            st.image(qimg, caption="Auto-generated quantification bar plot", use_container_width=True)
+            flow_zip = build_zip([("flow_panel.png", image_to_png_bytes(flow_panel)), ("flow_quantification.png", image_to_png_bytes(qimg))])
+            st.download_button("Download flow composite pack (ZIP)", flow_zip, "flow_panel_formatter_pack.zip", "application/zip")
+
+    with sci_tabs[3]:
+        st.subheader("Reaction Scheme Template Library")
+        template_choice = st.selectbox("Template", ["Radiochemistry", "Peptide Synthesis", "Custom Stepwise"])
+        title = st.text_input("Scheme title", template_choice)
+        step1 = st.text_input("Left molecule/step", "Precursor")
+        step2 = st.text_input("Right molecule/step", "Product")
+        cond = st.text_input("Conditions", "18F, 80°C, 20 min")
+        rs_tex = reaction_scheme_template(title, step1, step2, cond)
+        st.code(rs_tex, language="latex")
+        st.download_button("Download reaction scheme .tex", rs_tex, "reaction_scheme_template.tex", "text/x-tex")
+
+    with sci_tabs[4]:
+        st.subheader("Auto Multi-Panel Builder (Publication-Ready)")
+        multi_files = st.file_uploader("Upload 4-6 PNG/JPG panels", type=["png", "jpg", "jpeg"], accept_multiple_files=True, key="multi_panel_uploader")
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            columns_mp = st.selectbox("Columns", [2, 3], index=0)
+        with m2:
+            spacing_mp = st.slider("Spacing", 8, 60, 20)
+        with m3:
+            label_color_mp = st.color_picker("Label color", "#000000")
+        if multi_files and 4 <= len(multi_files) <= 6:
+            mp_imgs = [Image.open(f).convert("RGB") for f in multi_files]
+            mw, mh = max(im.width for im in mp_imgs), max(im.height for im in mp_imgs)
+            resized = [im.resize((mw, mh)) for im in mp_imgs]
+            merged = compose_panel(resized, columns=columns_mp, spacing=spacing_mp, bg_color="#ffffff", add_labels=True, label_color=label_color_mp)
+            st.image(merged, caption="Auto-assembled publication panel", use_container_width=True)
+            st.download_button("Download multi-panel PNG", image_to_png_bytes(merged), "publication_multi_panel.png", "image/png")
+        elif multi_files:
+            st.warning("Please upload between 4 and 6 images for this mode.")
+
 st.markdown("---")
 st.caption("Developed by Yashwant Nama | PhD Research Portfolio Project")
