@@ -447,6 +447,61 @@ def collaboration_report(comment_rows: list[list[str]]) -> str:
     lines.append("")
     lines.append(f"Approved items: {approvals}")
     return "\n".join(lines)
+def build_chemfig_document(chemfig_code: str, caption: str) -> str:
+    lines = [
+        r"\documentclass[tikz,border=10pt]{standalone}",
+        r"\usepackage{chemfig}",
+        r"\usepackage[version=4]{mhchem}",
+        r"\begin{document}",
+        r"\begin{tikzpicture}",
+        rf"\node[anchor=west] at (0,0) {{\Large {caption}}};",
+        rf"\node[anchor=west] at (0,-1.0) {{\chemfig{{{chemfig_code}}}}};",
+        r"\end{tikzpicture}",
+        r"\end{document}",
+    ]
+    return "\n".join(lines)
+
+
+def build_significance_tikz(x1: float, x2: float, y: float, stars: str, plot_type: str = "bar") -> str:
+    baseline = "0" if plot_type == "bar" else str(round(y - 1.2, 2))
+    return rf"""\begin{{tikzpicture}}
+\draw[->] (0,{baseline}) -- (0,{y + 1.5}) node[above] {{Value}};
+\draw[->] (0,{baseline}) -- ({max(x1, x2) + 1.2},{baseline}) node[right] {{Condition}};
+\draw[thick, fill=blue!20] ({x1 - 0.25},{baseline}) rectangle ({x1 + 0.25},{y - 0.2});
+\draw[thick, fill=green!20] ({x2 - 0.25},{baseline}) rectangle ({x2 + 0.25},{y});
+\draw[stealth-stealth] ({x1},{y + 0.2}) -- node[above]{{{stars}}} ({x2},{y + 0.2});
+\end{{tikzpicture}}"""
+
+
+def build_histogram_overlay_tikz(x_steps: int, y_steps: int, title: str) -> str:
+    lines = [r"\begin{tikzpicture}[x=0.65cm,y=0.45cm]", f"\node[anchor=west] at (0,{y_steps+1}) {{{title}}};"]
+    lines.append(r"\draw[->] (0,0) -- (" + str(x_steps + 0.7) + r",0) node[right] {Intensity};")
+    lines.append(r"\draw[->] (0,0) -- (0," + str(y_steps + 0.7) + r") node[above] {Counts};")
+    for x in range(1, x_steps + 1):
+        lines.append(f"\draw[gray!30] ({x},0) -- ({x},{y_steps});")
+    for y in range(1, y_steps + 1):
+        lines.append(f"\draw[gray!30] (0,{y}) -- ({x_steps},{y});")
+    lines.append(r"\draw[thick, RoyalBlue, smooth] plot coordinates {(0.3,0.5) (1.0,1.3) (2.0,2.5) (3.0,3.2) (4.3,2.2) (5.5,1.4)};")
+    lines.append(r"\draw[thick, BrickRed, smooth] plot coordinates {(0.5,0.3) (1.5,1.0) (2.5,1.8) (3.6,2.8) (4.7,3.0) (5.8,2.2)};")
+    lines.append(r"\end{tikzpicture}")
+    return "\n".join(lines)
+
+
+def build_panel_layout_tikz(layout: str, spacing: float, show_labels: bool) -> str:
+    if layout == "2x2":
+        coords = [(0,2), (4+spacing,2), (0,0), (4+spacing,0)]
+        labels = ["A", "B", "C", "D"]
+    else:
+        coords = [(0,2), (4+spacing,2), (8+2*spacing,2), (0,0), (4+spacing,0), (8+2*spacing,0)]
+        labels = ["A", "B", "C", "D", "E", "F"]
+
+    lines = [r"\begin{tikzpicture}[x=1cm,y=1cm]", r"\def\w{3.7}", r"\def\h{1.7}"]
+    for idx, (x, y) in enumerate(coords):
+        lines.append(f"\draw[thick] ({x},{y}) rectangle ++(\w,\h);")
+        if show_labels:
+            lines.append(f"\node[anchor=north west, font=\bfseries] at ({x+0.12},{y+1.58}) {{{labels[idx]}}};")
+    lines.append(r"\end{tikzpicture}")
+    return "\n".join(lines)
 
 st.title("🔬 Bio-TikZ Studio | End-to-End Figure Production")
 st.caption("Phase 1 + 2 + 3 features: conversion, design, accessibility, composition, packaging, and workflow automation")
@@ -461,6 +516,7 @@ main_tabs = st.tabs(
         "📦 Workspace + Export Pack",
         "🏆 Design Strategy",
         "🚀 Extraordinary Lab",
+        "🧫 Publication Panels",
     ]
 )
 
