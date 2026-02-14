@@ -167,17 +167,21 @@ def generate_legend_tikz(legend_items: list[dict[str, str]]) -> str:
         shape = item["shape"]
         style = item.get("style", "solid")
 
-        # Convert HEX to RGB
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
         b = int(hex_color[4:6], 16)
 
-        fill={rgb,255:red,0;green,0;blue,255!25}
+        # Lighten manually
+        lighten_factor = 0.25
+        r = int(r + (255 - r) * lighten_factor)
+        g = int(g + (255 - g) * lighten_factor)
+        b = int(b + (255 - b) * lighten_factor)
+
+        tikz_color = f"{{rgb,255:red,{r};green,{g};blue,{b}}}"
 
         lines.append(
             f"\\node[{shape}, draw, {style}, fill={tikz_color}, minimum size=0.45cm] at (0,{round(y,2)}) {{}};"
         )
-
         lines.append(
             f"\\node[anchor=west] at (0.6,{round(y,2)}) {{{label}}};"
         )
@@ -186,6 +190,7 @@ def generate_legend_tikz(legend_items: list[dict[str, str]]) -> str:
 
     lines.append(r"\end{tikzpicture}")
     return "\n".join(lines)
+
 
 
 
