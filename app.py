@@ -461,10 +461,19 @@ with main_tabs[1]:
 
     # 5. Keep the expander below for quick help
     with st.expander("🚀 How to use this in Overleaf / LaTeX"):
-        st.markdown("""
-        **Option A:** If you downloaded the full .tex, simply upload it to Overleaf.
-        **Option B:** If copying the snippet, ensure your preamble has `\usepackage[svgnames]{xcolor}`.
-        """)
+           st.markdown(r"""
+**Step 1:** Copy this preamble to the very top of your LaTeX file:
+
+\documentclass{article}
+\usepackage[svgnames]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, shadows, positioning}
+
+\begin{document}
+
+**Option A:** If you downloaded the full .tex, simply upload it to Overleaf.
+**Option B:** If copying the snippet, ensure your preamble has `\usepackage[svgnames]{xcolor}`.
+""")
 
         
         st.info("💡 Tip: If you want the colors to be darker, change `!25` to `!100` in the code.")
