@@ -1071,5 +1071,81 @@ Generated with Bio-TikZ Studio extraordinary workflow with semantic connectors, 
     review_md = collaboration_report(comments)
     st.code(review_md, language="markdown")
     st.download_button("Download collaboration report", review_md, "collaboration_review.md", "text/markdown")
+with main_tabs[7]:
+    st.header("Publication Panels Toolkit (A/B/C/D)")
+    st.caption("Implements requested chemical schemes, significance overlays, flow histogram styling, and auto-layout generator.")
+
+    panel_tabs = st.tabs([
+        "Panel A: Chemfig",
+        "Panel B&D: Significance Adder",
+        "Panel C: Histogram Stylist",
+        "Panel Layout Generator",
+    ])
+
+    with panel_tabs[0]:
+        st.subheader("Chemical Reaction Scheme (Radiochemistry)")
+        chemfig_code = st.text_area(
+            "Paste chemfig code",
+            value="CH_3-CH_2-OH",
+            help="Example: *6((-N=-N(-CH_3)-=))",
+        )
+        chem_caption = st.text_input("Scheme label", "Radiolabeling Step (18F)")
+        chem_tex = build_chemfig_document(chemfig_code=chemfig_code, caption=chem_caption)
+        st.code(chem_tex, language="latex")
+        st.download_button(
+            "Download Chemfig .tex",
+            chem_tex,
+            "panelA_chemfig.tex",
+            "text/x-tex",
+        )
+
+    with panel_tabs[1]:
+        st.subheader("Statistical Bar/Line Plot Significance Adder")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            x1 = st.number_input("Bar/point 1 x", 0.0, 20.0, 1.0)
+        with c2:
+            x2 = st.number_input("Bar/point 2 x", 0.0, 20.0, 2.0)
+        with c3:
+            y_sig = st.number_input("Significance y-level", 0.0, 30.0, 5.0)
+        with c4:
+            stars = st.selectbox("Star annotation", ["*", "**", "***", "****", "ns"], index=2)
+        plot_type = st.radio("Plot type", ["bar", "line"], horizontal=True)
+        sig_tex = build_significance_tikz(x1=x1, x2=x2, y=y_sig, stars=stars, plot_type=plot_type)
+        st.code(sig_tex, language="latex")
+        st.download_button("Download Significance .tex", sig_tex, "panelBD_significance.tex", "text/x-tex")
+
+    with panel_tabs[2]:
+        st.subheader("Flow Cytometry / Histogram Stylist")
+        h1, h2 = st.columns(2)
+        with h1:
+            x_steps = st.slider("X grid steps", 4, 15, 8)
+        with h2:
+            y_steps = st.slider("Y grid steps", 3, 10, 6)
+        hist_title = st.text_input("Histogram title", "Flow Overlay (Styled)")
+        hist_tex = build_histogram_overlay_tikz(x_steps=x_steps, y_steps=y_steps, title=hist_title)
+        st.code(hist_tex, language="latex")
+        st.download_button("Download Histogram Overlay .tex", hist_tex, "panelC_histogram_overlay.tex", "text/x-tex")
+
+    with panel_tabs[3]:
+        st.subheader("Auto Panel Layout Generator")
+        l1, l2, l3 = st.columns(3)
+        with l1:
+            layout_choice = st.selectbox("Grid", ["2x2", "3x2"], index=0)
+        with l2:
+            spacing = st.slider("Horizontal spacing", 0.0, 2.5, 0.5, step=0.1)
+        with l3:
+            show_labels = st.checkbox("Auto labels A, B, C...", value=True)
+        layout_tex = build_panel_layout_tikz(layout=layout_choice, spacing=spacing, show_labels=show_labels)
+        st.code(layout_tex, language="latex")
+        st.download_button("Download Layout .tex", layout_tex, "panel_layout_generator.tex", "text/x-tex")
+        
+        combined_zip = build_zip([
+            ("panelA_chemfig.tex", build_chemfig_document(chemfig_code, chem_caption).encode("utf-8")),
+            ("panelBD_significance.tex", sig_tex.encode("utf-8")),
+            ("panelC_histogram_overlay.tex", hist_tex.encode("utf-8")),
+            ("panel_layout_generator.tex", layout_tex.encode("utf-8")),
+        ])
+        st.download_button("Download Full Panel Toolkit (ZIP)", combined_zip, "publication_panel_toolkit.zip", "application/zip")
 st.markdown("---")
 st.caption("Developed by Yashwant Nama | PhD Research Portfolio Project")
