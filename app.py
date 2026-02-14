@@ -445,7 +445,7 @@ with main_tabs[1]:
         st.code(preamble_code, language="latex")
         
         st.markdown("""
-        **Step 2:** Paste the **Generated Legend** code (from the box above) anywhere between `\begin{document}` and `\end{document}`.
+        **Step 2:** Paste the **Generated Legend** code (from the box above) anywhere between `\ begin{document}` and `\end{document}`.
         
         **Step 3:** Recompile! 
         """)
