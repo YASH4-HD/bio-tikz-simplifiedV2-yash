@@ -859,8 +859,43 @@ def reaction_scheme_template(title: str, step1: str, step2: str, conditions: str
 \end{{tikzpicture}}"""
 
 
+def build_project_summary_pdf() -> bytes:
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    summary = f"""Bio-TikZ Studio | Final Project Summary
+
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Workflow Coverage:
+1) Image Lab: PDF conversion, accessibility review, panel composition
+2) Design Studio: TikZ generators, templates, legends, AI snippet importer
+3) Data & Plots: Publication panels + scientific plotting suite
+4) AI & Logic: Mechanistic connector, ontology checks, Mermaid pathway builder
+5) Project Management: workspace JSON, Overleaf pack, provenance ledger, figure diff
+
+Deliverables:
+- Reproducible code-first diagrams
+- Reviewer-ready exports
+- Publication panel toolkits
+- Provenance + change tracking
+"""
+    rect = fitz.Rect(50, 50, 545, 792)
+    page.insert_textbox(rect, summary, fontsize=12, fontname="helv", lineheight=1.35)
+    return doc.tobytes()
+
+
 st.title("🔬 Bio-TikZ Studio | End-to-End Figure Production")
 st.caption("Phase 1 + 2 + 3 features: conversion, design, accessibility, composition, packaging, and workflow automation")
+
+with st.sidebar:
+    st.header("Final Export")
+    st.download_button(
+        "📄 Download Final Project Summary (PDF)",
+        data=build_project_summary_pdf(),
+        file_name="bio_tikz_final_summary.pdf",
+        mime="application/pdf",
+    )
+
 st.markdown("---")
 
 main_tabs = st.tabs(
@@ -874,7 +909,11 @@ main_tabs = st.tabs(
 )
 
 with main_tabs[0]:
-    st.header("Batch PDF Converter + Journal Presets")
+    st.header("🖼️ Image Lab: Conversion & Processing")
+    img_tab1, img_tab2, img_tab3 = st.tabs(["📄 PDF Converter", "♿ Accessibility Check", "🧩 Panel Composer"])
+
+    with img_tab1:
+        st.header("Batch PDF Converter + Journal Presets")
 
     preset = st.selectbox("Output Profile", list(OUTPUT_PROFILES.keys()))
     default_profile = OUTPUT_PROFILES[preset]
@@ -1131,7 +1170,7 @@ with main_tabs[1]:
 
 
 
-with main_tabs[0]:
+with img_tab2:
     st.header("Accessibility Validator + Reviewer-Ready Export")
     uploaded_image = st.file_uploader("Upload PNG/JPG for accessibility check", type=["png", "jpg", "jpeg"])
 
@@ -1174,7 +1213,7 @@ with main_tabs[0]:
             mime="application/zip",
         )
 
-with main_tabs[0]:
+with img_tab3:
     st.header("Panel Composer (A/B/C/D figure assembly)")
     panel_files = st.file_uploader(
         "Upload processed PNG/JPG panel images", type=["png", "jpg", "jpeg"], accept_multiple_files=True
