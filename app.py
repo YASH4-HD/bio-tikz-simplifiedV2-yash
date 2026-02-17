@@ -865,16 +865,11 @@ st.markdown("---")
 
 main_tabs = st.tabs(
     [
-        "🖼️ Converter Lab",
-        "🧬 TikZ + Template Studio",
-        "🧪 Accessibility + Reviewer Mode",
-        "🧩 Panel Composer",
-        "📦 Workspace + Export Pack",
-        "🏆 Design Strategy",
-        "🚀 Extraordinary Lab",
-        "🧫 Publication Panels",
-        "📊 Scientific Plot Generator",
-        "🧠 Innovation Suite (12)",
+        "🖼️ Image Lab",
+        "🧬 Design Studio",
+        "📊 Data & Plots",
+        "🧠 AI & Logic",
+        "📋 Project Management",
     ]
 )
 
@@ -1136,7 +1131,7 @@ with main_tabs[1]:
 
 
 
-with main_tabs[2]:
+with main_tabs[0]:
     st.header("Accessibility Validator + Reviewer-Ready Export")
     uploaded_image = st.file_uploader("Upload PNG/JPG for accessibility check", type=["png", "jpg", "jpeg"])
 
@@ -1179,7 +1174,7 @@ with main_tabs[2]:
             mime="application/zip",
         )
 
-with main_tabs[3]:
+with main_tabs[0]:
     st.header("Panel Composer (A/B/C/D figure assembly)")
     panel_files = st.file_uploader(
         "Upload processed PNG/JPG panel images", type=["png", "jpg", "jpeg"], accept_multiple_files=True
@@ -1261,7 +1256,20 @@ with main_tabs[4]:
         mime="application/zip",
     )
 
-with main_tabs[5]:
+    st.subheader("Provenance Ledger + Figure Diff")
+    pm_files = [
+        ("sample_node.tex", generate_tikz_code("Macrophage", "#e74c3c", "circle", "thick", True, "Standard Cell").encode("utf-8")),
+        ("sample_legend.tex", generate_legend_tikz([{"label": "Cell", "color": "#e74c3c", "shape": "circle", "style": "solid"}]).encode("utf-8")),
+    ]
+    provenance_manifest = build_provenance_manifest(pm_files, {"module": "Project Management", "profile": "Custom"})
+    st.code(provenance_manifest, language="json")
+    st.download_button("Download provenance_manifest.json", provenance_manifest, "provenance_manifest.json", "application/json")
+
+    prev_json = st.text_area("Previous project JSON", '{"nodes":["A","B"],"edges":1}', key="pm_diff_prev")
+    curr_json = st.text_area("Current project JSON", '{"nodes":["A","B","C"],"edges":2}', key="pm_diff_curr")
+    st.code(diff_projects(prev_json, curr_json), language="diff")
+
+with main_tabs[1]:
     st.header("Award-Winning Design Strategy Board")
     audience = st.selectbox(
         "Target Context",
@@ -1315,7 +1323,7 @@ with main_tabs[5]:
         mime="text/markdown",
     )
 
-with main_tabs[6]:
+with main_tabs[3]:
     st.header("Extraordinary Lab: All 10 Advanced Features")
 
     st.subheader("1) Mechanistic Connector 2.0")
@@ -1432,7 +1440,7 @@ Generated with Bio-TikZ Studio extraordinary workflow with semantic connectors, 
     st.download_button("Download collaboration report", review_md, "collaboration_review.md", "text/markdown")
 
 
-with main_tabs[7]:
+with main_tabs[2]:
     st.header("Publication Panels Toolkit (A/B/C/D)")
     st.caption("Implements requested chemical schemes, significance overlays, flow histogram styling, and auto-layout generator.")
 
@@ -1568,7 +1576,7 @@ with main_tabs[7]:
         st.download_button("Download Full Panel Toolkit (ZIP)", combined_zip, "publication_panel_toolkit.zip", "application/zip")
 
 
-with main_tabs[8]:
+with main_tabs[2]:
     st.header("Scientific Plot Generator")
     st.caption("Grouped bars, dose-response fitting, flow panel formatter, reaction scheme templates, and auto multi-panel builder.")
 
@@ -1667,95 +1675,6 @@ with main_tabs[8]:
         elif multi_files:
             st.warning("Please upload between 4 and 6 images for this mode.")
 
-
-with main_tabs[9]:
-    st.header("Innovation Suite: Implemented 12 Requested Features")
-
-    st.subheader("1) Ontology Autofix Engine")
-    autofix_nodes_raw = st.text_input("Nodes (comma-separated)", "Ligand,Receptor,Nucleus", key="auto_nodes")
-    autofix_edges_raw = st.text_area("Edges CSV: source,target,relation,evidence", "Ligand,Receptor,Activation,hypothesis\nReceptor,Nucleus,Activation,hypothesis")
-    af_nodes = [n.strip() for n in autofix_nodes_raw.split(",") if n.strip()]
-    af_edges = []
-    for row in parse_csv_lines(autofix_edges_raw):
-        if len(row) >= 3:
-            af_edges.append({"source": row[0], "target": row[1], "relation": row[2], "evidence": row[3] if len(row) > 3 else "hypothesis"})
-    fixed_nodes, fixed_edges, autofix_actions = ontology_autofix(af_nodes, af_edges)
-    st.write("Autofix actions:")
-    for action in autofix_actions:
-        st.write(f"- {action}")
-    st.code(build_mechanistic_tikz(fixed_nodes, fixed_edges), language="latex")
-
-    st.subheader("2) Evidence-Aware Pathway Styling")
-    reviewer_mode = st.checkbox("Reviewer mode (de-emphasize uncertain edges)", value=True)
-    st.code(build_mechanistic_tikz(fixed_nodes, fixed_edges, evidence_aware=True, reviewer_mode=reviewer_mode), language="latex")
-
-    st.subheader("3) Journal Compliance Linter")
-    l1, l2, l3 = st.columns(3)
-    with l1:
-        font_pt = st.number_input("Minimum font size (pt)", 4.0, 20.0, 7.0, step=0.5)
-    with l2:
-        line_styles = st.slider("Line style count", 1, 8, 3)
-    with l3:
-        linter_dpi = st.slider("Target DPI", 72, 1200, 300)
-    lint_palette = st.text_input("Palette hex values", "#1f77b4,#d62728,#2ca02c")
-    labels_ok = st.checkbox("Panel labels consistently placed", value=True)
-    lint_score, lint_issues = journal_compliance_lint(font_pt, line_styles, [c.strip() for c in lint_palette.split(",") if c.strip()], linter_dpi, labels_ok)
-    st.metric("Compliance Score", f"{lint_score}/100")
-    st.json({"issues": lint_issues})
-
-    st.subheader("4) Round-Trip TikZ Parser + Editor")
-    tikz_input = st.text_area("Paste TikZ to parse", r"\begin{tikzpicture}\n\node[circle,draw] (A) at (0,0) {A};\n\node[circle,draw] (B) at (2,0) {B};\n\draw[->,thick] (A) -- (B);\n\end{tikzpicture}")
-    rt_nodes, rt_edges, rt_notes = parse_tikz_roundtrip(tikz_input)
-    st.json({"nodes": rt_nodes, "edges": rt_edges, "notes": rt_notes})
-
-    st.subheader("5) Template Evolution Studio")
-    fam_org = st.selectbox("Template family organelle", ["Mitochondria", "Golgi", "Lipid Bilayer", "Nucleus"], key="fam_org")
-    fam_variants = st.text_input("Variants", "WT,KO,Rescue")
-    fam_map = generate_template_family(fam_org, [v.strip() for v in fam_variants.split(",") if v.strip()], intensity=55)
-    st.code("\n\n".join([f"% {k}\n{v}" for k, v in fam_map.items()]), language="latex")
-
-    st.subheader("6) Statistical Annotation Intelligence")
-    stat_labels = st.text_input("Group labels", "Control,Treatment,Rescue")
-    stat_vals_raw = st.text_input("Group values", "1.0,1.8,1.3")
-    stat_vals = [_safe_float(x, 0.0) for x in stat_vals_raw.split(",") if x.strip()]
-    brackets = auto_significance_brackets([x.strip() for x in stat_labels.split(",") if x.strip()], stat_vals)
-    st.json(brackets)
-
-    st.subheader("7) Export Provenance Ledger")
-    demo_files = [("mechanism.tex", build_mechanistic_tikz(fixed_nodes, fixed_edges).encode("utf-8"))]
-    manifest = build_provenance_manifest(demo_files, {"dpi": linter_dpi, "profile": "Custom"})
-    st.code(manifest, language="json")
-
-    st.subheader("8) Collaboration Review Graph")
-    collab_csv = st.text_area("reviewer,node,status,note", "PI,Receptor,approve,Looks good\nReviewer1,Nucleus,changes,Need citation")
-    collab_summary = collaboration_graph(parse_csv_lines(collab_csv))
-    st.json(collab_summary)
-
-    st.subheader("9) Accessibility Co-Pilot v2")
-    acc_file = st.file_uploader("Upload image for co-pilot", type=["png", "jpg", "jpeg"], key="accv2")
-    if acc_file is not None:
-        acc_img = Image.open(acc_file).convert("RGB")
-        v2 = accessibility_copilot_v2(acc_img)
-        st.metric("Accessibility V2 Score", f"{v2['score']}/100")
-        st.json(v2)
-
-    st.subheader("10) Figure Storyboard Mode")
-    story_title = st.text_input("Mechanism title", "Ligand-Receptor Signaling")
-    story_states = [x.strip() for x in st.text_input("States", "Baseline,Stimulated,Recovery", key="story_states").split(",") if x.strip()]
-    story_panels = [x.strip() for x in st.text_input("Panels", "A: Mechanism,B: Quant,C: Validation", key="story_panels").split(",") if x.strip()]
-    story_quant = st.text_area("Quant summary", "Treatment increased signal by 1.8x over control.")
-    storyboard_md = build_storyboard_markdown(story_title, story_states, story_panels, story_quant)
-    st.code(storyboard_md, language="markdown")
-
-    st.subheader("11) Domain Packs Marketplace")
-    packs = domain_packs_catalog()
-    selected_pack = st.selectbox("Domain pack", list(packs.keys()))
-    st.json(packs[selected_pack])
-
-    st.subheader("12) What Changed? Figure Diff")
-    prev_json = st.text_area("Previous project JSON", '{"nodes":["A","B"],"edges":1}', key="diff_prev")
-    curr_json = st.text_area("Current project JSON", '{"nodes":["A","B","C"],"edges":2}', key="diff_curr")
-    st.code(diff_projects(prev_json, curr_json), language="diff")
 
 st.markdown("---")
 st.caption("Developed by Yashwant Nama | PhD Research Portfolio Project")
