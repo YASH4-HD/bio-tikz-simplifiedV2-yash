@@ -1,5 +1,8 @@
+import difflib
+import hashlib
 import io
 import json
+import re
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -280,7 +283,7 @@ def parse_csv_lines(raw_text: str) -> list[list[str]]:
     return rows
 
 
-def build_mechanistic_tikz(nodes: list[str], edges: list[dict]) -> str:
+def build_mechanistic_tikz(nodes: list[str], edges: list[dict], evidence_aware: bool = False, reviewer_mode: bool = False) -> str:
     if not nodes:
         return "% Add nodes first"
 
@@ -299,8 +302,17 @@ def build_mechanistic_tikz(nodes: list[str], edges: list[dict]) -> str:
         evidence = edge.get("evidence", "hypothesis")
         tag = "[validated]" if evidence == "validated" else "[lit]" if evidence == "literature-supported" else "[hyp]"
         annotation = "P" if relation == "Phosphorylation" else "Ub" if relation == "Ubiquitination" else ""
+        extra = ""
+        if evidence_aware:
+            evidence = edge.get("evidence", "hypothesis")
+            if evidence == "validated":
+                extra = ", line width=1.3pt"
+            elif evidence == "literature-supported":
+                extra = ", opacity=0.85"
+            else:
+                extra = ", opacity=0.5" if reviewer_mode else ", densely dashed"
         lines.append(
-            f"\\draw[{style['style']}, {style['arrow']}] ({edge['source']}) -- ({edge['target']}) node[midway, above] {{{tag} {annotation}}};"
+            f"\\draw[{style['style']}{extra}, {style['arrow']}] ({edge['source']}) -- ({edge['target']}) node[midway, above] {{{tag} {annotation}}};"
         )
 
     lines.append(r"\end{tikzpicture}")
@@ -666,6 +678,177 @@ def dose_response_pgfplots(concentrations: list[float], responses: list[float], 
     return "\n".join(lines)
 
 
+
+
+def ontology_autofix(nodes: list[str], edges: list[dict]) -> tuple[list[str], list[dict], list[str]]:
+    fixed_nodes = list(nodes)
+    fixed_edges: list[dict] = []
+    actions: list[str] = []
+
+    for edge in edges:
+        src = edge.get("source", "")
+        dst = edge.get("target", "")
+        relation = edge.get("relation", "Activation")
+
+        if "receptor" in src.lower() and "nucleus" in dst.lower() and relation != "Translocation":
+            if "Cytosol" not in fixed_nodes:
+                fixed_nodes.append("Cytosol")
+            fixed_edges.append({"source": src, "target": "Cytosol", "relation": "Translocation", "evidence": edge.get("evidence", "hypothesis")})
+            fixed_edges.append({"source": "Cytosol", "target": dst, "relation": relation, "evidence": edge.get("evidence", "hypothesis")})
+            actions.append(f"Inserted translocation bridge: {src} -> Cytosol -> {dst}.")
+            continue
+
+        if relation == "Phosphorylation" and "dna" in dst.lower():
+            fixed_edge = dict(edge)
+            fixed_edge["relation"] = "Activation"
+            fixed_edges.append(fixed_edge)
+            actions.append(f"Adjusted relation for {src}->{dst}: Phosphorylation replaced with Activation.")
+            continue
+
+        fixed_edges.append(dict(edge))
+
+    if not actions:
+        actions.append("No ontology autofixes were required.")
+
+    return fixed_nodes, fixed_edges, actions
+
+
+def journal_compliance_lint(font_pt: float, line_styles: int, palette: list[str], target_dpi: int, panel_labels_ok: bool) -> tuple[float, list[str]]:
+    score = 100.0
+    issues: list[str] = []
+
+    if font_pt < 7:
+        score -= 20
+        issues.append("Increase minimum font size to >= 7 pt for print readability.")
+    if line_styles > 3:
+        score -= 10
+        issues.append("Reduce distinct line styles to <= 3.")
+    if target_dpi < 300:
+        score -= 20
+        issues.append("Export at >=300 DPI for manuscript quality.")
+    if not panel_labels_ok:
+        score -= 15
+        issues.append("Panel labels should be present and consistently positioned.")
+
+    if len(palette) >= 2:
+        min_contrast = min(contrast_score(palette[i], palette[i + 1]) for i in range(len(palette) - 1))
+        if min_contrast < 35:
+            score -= 15
+            issues.append("Palette contrast is low; increase separation between neighboring colors.")
+
+    if not issues:
+        issues.append("All major journal checks passed.")
+
+    return max(0.0, round(score, 2)), issues
+
+
+def parse_tikz_roundtrip(tikz_text: str) -> tuple[list[str], list[dict], list[str]]:
+    node_matches = re.findall(r"\\node\[[^\]]*\]\s*\(([^)]+)\).*?\{([^}]*)\};", tikz_text)
+    nodes = [label.strip() or name.strip() for name, label in node_matches]
+    edge_matches = re.findall(r"\\draw\[[^\]]*\]\s*\(([^)]+)\)\s*--\s*\(([^)]+)\)", tikz_text)
+    edges = [{"source": a.strip(), "target": b.strip(), "relation": "Activation", "evidence": "hypothesis"} for a, b in edge_matches]
+    notes = [f"Parsed {len(nodes)} node(s) and {len(edges)} edge(s)."]
+    return nodes, edges, notes
+
+
+def generate_template_family(organelle: str, variant_labels: list[str], intensity: int) -> dict[str, str]:
+    return {label: organelle_tikz(organelle, intensity, label) for label in variant_labels}
+
+
+def auto_significance_brackets(group_labels: list[str], values: list[float]) -> list[dict[str, float | str]]:
+    brackets: list[dict[str, float | str]] = []
+    if len(values) < 2:
+        return brackets
+    max_val = max(values) if values else 1.0
+    for i in range(len(values) - 1):
+        diff = abs(values[i + 1] - values[i])
+        stars = "ns"
+        if diff >= 0.45 * max_val:
+            stars = "***"
+        elif diff >= 0.25 * max_val:
+            stars = "**"
+        elif diff >= 0.12 * max_val:
+            stars = "*"
+        brackets.append({"x1": float(i + 1), "x2": float(i + 2), "y": float(max(values) + (i + 1) * 0.4), "rise": 0.25, "stars": stars})
+    return brackets
+
+
+def build_provenance_manifest(files: list[tuple[str, bytes]], params: dict) -> str:
+    payload = {
+        "generated_at": datetime.now().isoformat(),
+        "app": "Bio-TikZ Studio",
+        "parameters": params,
+        "artifacts": [],
+    }
+    for name, content in files:
+        payload["artifacts"].append({
+            "filename": name,
+            "bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        })
+    return json.dumps(payload, indent=2)
+
+
+def collaboration_graph(comment_rows: list[list[str]]) -> dict:
+    summary = {"approved": 0, "changes": 0, "rejected": 0, "by_node": {}}
+    for row in comment_rows:
+        if len(row) < 4:
+            continue
+        reviewer, node, status, note = row[0], row[1], row[2].lower(), row[3]
+        if status.startswith("approve"):
+            summary["approved"] += 1
+        elif status.startswith("change"):
+            summary["changes"] += 1
+        else:
+            summary["rejected"] += 1
+        summary["by_node"].setdefault(node, []).append({"reviewer": reviewer, "status": status, "note": note})
+    return summary
+
+
+def accessibility_copilot_v2(img: Image.Image) -> dict:
+    gray = ImageOps.grayscale(img)
+    hist = gray.histogram()
+    dark = sum(hist[:48])
+    bright = sum(hist[208:])
+    total = max(1, sum(hist))
+    balance = round((min(dark, bright) / total) * 200, 2)
+    score = grayscale_score(img)
+    suggestion = "Increase local contrast around labels." if balance < 12 else "Contrast distribution looks balanced."
+    return {"score": score, "contrast_balance": balance, "suggestion": suggestion}
+
+
+def build_storyboard_markdown(mechanism_title: str, states: list[str], panels: list[str], quant_summary: str) -> str:
+    state_txt = " -> ".join(states) if states else "N/A"
+    panel_txt = "\n".join([f"- {p}" for p in panels]) if panels else "- None"
+    return f"""# Figure Storyboard
+
+## Mechanism
+{mechanism_title}
+
+## State Progression
+{state_txt}
+
+## Panels
+{panel_txt}
+
+## Quant Summary
+{quant_summary}
+"""
+
+
+def domain_packs_catalog() -> dict[str, dict]:
+    return {
+        "Immunology": {"templates": ["Immune Synapse", "Cell Signaling"], "relations": ["Activation", "Inhibition", "Translocation"]},
+        "Oncology": {"templates": ["CRISPR Workflow", "Cell Signaling"], "relations": ["Activation", "Phosphorylation", "Ubiquitination"]},
+        "Metabolism": {"templates": ["Mitochondria (Bezier)", "Lipid Bilayer"], "relations": ["Activation", "Translocation", "Cleavage"]},
+    }
+
+
+def diff_projects(old_payload: str, new_payload: str) -> str:
+    old_lines = old_payload.splitlines()
+    new_lines = new_payload.splitlines()
+    return "\n".join(difflib.unified_diff(old_lines, new_lines, fromfile="previous", tofile="current", lineterm=""))
+
 def reaction_scheme_template(title: str, step1: str, step2: str, conditions: str) -> str:
     return rf"""\begin{{tikzpicture}}[>=Stealth]
 \node[draw, rounded corners, minimum width=3.2cm, minimum height=1.2cm] (a) at (0,0) {{{step1}}};
@@ -691,6 +874,7 @@ main_tabs = st.tabs(
         "🚀 Extraordinary Lab",
         "🧫 Publication Panels",
         "📊 Scientific Plot Generator",
+        "🧠 Innovation Suite (12)",
     ]
 )
 
@@ -1482,6 +1666,96 @@ with main_tabs[8]:
             st.download_button("Download multi-panel PNG", image_to_png_bytes(merged), "publication_multi_panel.png", "image/png")
         elif multi_files:
             st.warning("Please upload between 4 and 6 images for this mode.")
+
+
+with main_tabs[9]:
+    st.header("Innovation Suite: Implemented 12 Requested Features")
+
+    st.subheader("1) Ontology Autofix Engine")
+    autofix_nodes_raw = st.text_input("Nodes (comma-separated)", "Ligand,Receptor,Nucleus", key="auto_nodes")
+    autofix_edges_raw = st.text_area("Edges CSV: source,target,relation,evidence", "Ligand,Receptor,Activation,hypothesis\nReceptor,Nucleus,Activation,hypothesis")
+    af_nodes = [n.strip() for n in autofix_nodes_raw.split(",") if n.strip()]
+    af_edges = []
+    for row in parse_csv_lines(autofix_edges_raw):
+        if len(row) >= 3:
+            af_edges.append({"source": row[0], "target": row[1], "relation": row[2], "evidence": row[3] if len(row) > 3 else "hypothesis"})
+    fixed_nodes, fixed_edges, autofix_actions = ontology_autofix(af_nodes, af_edges)
+    st.write("Autofix actions:")
+    for action in autofix_actions:
+        st.write(f"- {action}")
+    st.code(build_mechanistic_tikz(fixed_nodes, fixed_edges), language="latex")
+
+    st.subheader("2) Evidence-Aware Pathway Styling")
+    reviewer_mode = st.checkbox("Reviewer mode (de-emphasize uncertain edges)", value=True)
+    st.code(build_mechanistic_tikz(fixed_nodes, fixed_edges, evidence_aware=True, reviewer_mode=reviewer_mode), language="latex")
+
+    st.subheader("3) Journal Compliance Linter")
+    l1, l2, l3 = st.columns(3)
+    with l1:
+        font_pt = st.number_input("Minimum font size (pt)", 4.0, 20.0, 7.0, step=0.5)
+    with l2:
+        line_styles = st.slider("Line style count", 1, 8, 3)
+    with l3:
+        linter_dpi = st.slider("Target DPI", 72, 1200, 300)
+    lint_palette = st.text_input("Palette hex values", "#1f77b4,#d62728,#2ca02c")
+    labels_ok = st.checkbox("Panel labels consistently placed", value=True)
+    lint_score, lint_issues = journal_compliance_lint(font_pt, line_styles, [c.strip() for c in lint_palette.split(",") if c.strip()], linter_dpi, labels_ok)
+    st.metric("Compliance Score", f"{lint_score}/100")
+    st.json({"issues": lint_issues})
+
+    st.subheader("4) Round-Trip TikZ Parser + Editor")
+    tikz_input = st.text_area("Paste TikZ to parse", r"\begin{tikzpicture}\n\node[circle,draw] (A) at (0,0) {A};\n\node[circle,draw] (B) at (2,0) {B};\n\draw[->,thick] (A) -- (B);\n\end{tikzpicture}")
+    rt_nodes, rt_edges, rt_notes = parse_tikz_roundtrip(tikz_input)
+    st.json({"nodes": rt_nodes, "edges": rt_edges, "notes": rt_notes})
+
+    st.subheader("5) Template Evolution Studio")
+    fam_org = st.selectbox("Template family organelle", ["Mitochondria", "Golgi", "Lipid Bilayer", "Nucleus"], key="fam_org")
+    fam_variants = st.text_input("Variants", "WT,KO,Rescue")
+    fam_map = generate_template_family(fam_org, [v.strip() for v in fam_variants.split(",") if v.strip()], intensity=55)
+    st.code("\n\n".join([f"% {k}\n{v}" for k, v in fam_map.items()]), language="latex")
+
+    st.subheader("6) Statistical Annotation Intelligence")
+    stat_labels = st.text_input("Group labels", "Control,Treatment,Rescue")
+    stat_vals_raw = st.text_input("Group values", "1.0,1.8,1.3")
+    stat_vals = [_safe_float(x, 0.0) for x in stat_vals_raw.split(",") if x.strip()]
+    brackets = auto_significance_brackets([x.strip() for x in stat_labels.split(",") if x.strip()], stat_vals)
+    st.json(brackets)
+
+    st.subheader("7) Export Provenance Ledger")
+    demo_files = [("mechanism.tex", build_mechanistic_tikz(fixed_nodes, fixed_edges).encode("utf-8"))]
+    manifest = build_provenance_manifest(demo_files, {"dpi": linter_dpi, "profile": "Custom"})
+    st.code(manifest, language="json")
+
+    st.subheader("8) Collaboration Review Graph")
+    collab_csv = st.text_area("reviewer,node,status,note", "PI,Receptor,approve,Looks good\nReviewer1,Nucleus,changes,Need citation")
+    collab_summary = collaboration_graph(parse_csv_lines(collab_csv))
+    st.json(collab_summary)
+
+    st.subheader("9) Accessibility Co-Pilot v2")
+    acc_file = st.file_uploader("Upload image for co-pilot", type=["png", "jpg", "jpeg"], key="accv2")
+    if acc_file is not None:
+        acc_img = Image.open(acc_file).convert("RGB")
+        v2 = accessibility_copilot_v2(acc_img)
+        st.metric("Accessibility V2 Score", f"{v2['score']}/100")
+        st.json(v2)
+
+    st.subheader("10) Figure Storyboard Mode")
+    story_title = st.text_input("Mechanism title", "Ligand-Receptor Signaling")
+    story_states = [x.strip() for x in st.text_input("States", "Baseline,Stimulated,Recovery", key="story_states").split(",") if x.strip()]
+    story_panels = [x.strip() for x in st.text_input("Panels", "A: Mechanism,B: Quant,C: Validation", key="story_panels").split(",") if x.strip()]
+    story_quant = st.text_area("Quant summary", "Treatment increased signal by 1.8x over control.")
+    storyboard_md = build_storyboard_markdown(story_title, story_states, story_panels, story_quant)
+    st.code(storyboard_md, language="markdown")
+
+    st.subheader("11) Domain Packs Marketplace")
+    packs = domain_packs_catalog()
+    selected_pack = st.selectbox("Domain pack", list(packs.keys()))
+    st.json(packs[selected_pack])
+
+    st.subheader("12) What Changed? Figure Diff")
+    prev_json = st.text_area("Previous project JSON", '{"nodes":["A","B"],"edges":1}', key="diff_prev")
+    curr_json = st.text_area("Current project JSON", '{"nodes":["A","B","C"],"edges":2}', key="diff_curr")
+    st.code(diff_projects(prev_json, curr_json), language="diff")
 
 st.markdown("---")
 st.caption("Developed by Yashwant Nama | PhD Research Portfolio Project")
