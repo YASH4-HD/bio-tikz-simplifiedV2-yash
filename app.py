@@ -1439,6 +1439,55 @@ Generated with Bio-TikZ Studio extraordinary workflow with semantic connectors, 
     st.code(review_md, language="markdown")
     st.download_button("Download collaboration report", review_md, "collaboration_review.md", "text/markdown")
 
+    st.subheader("🎨 Automated Pathway Builder (Diagrams-as-Code)")
+    st.caption("Create reproducible signaling pathways or experimental workflows using Mermaid logic.")
+
+    pathway_preset = st.selectbox("Select Template", [
+        "Custom",
+        "Viral Entry (COVID-19)",
+        "T-Cell Activation",
+        "Central Dogma",
+    ])
+
+    if pathway_preset == "Viral Entry (COVID-19)":
+        initial_code = """graph TD
+    S[Spike Protein] -->|Binds| ACE2[ACE2 Receptor]
+    ACE2 --> TMPRSS2{Protease Cleavage}
+    TMPRSS2 --> Entry((Viral Entry))
+    Entry --> Release[RNA Release]
+    style S fill:#f96,stroke:#333,stroke-width:2px
+    style ACE2 fill:#69f,stroke:#333"""
+    elif pathway_preset == "T-Cell Activation":
+        initial_code = """graph LR
+    APC[Antigen Presenting Cell] -->|MHC-II| TCR[T-Cell Receptor]
+    TCR --> Lck(Lck Activation)
+    Lck --> ZAP70(ZAP70 Signaling)
+    ZAP70 --> IL2[IL-2 Production]"""
+    elif pathway_preset == "Central Dogma":
+        initial_code = """graph LR
+    DNA -- Transcription --> RNA
+    RNA -- Translation --> Protein"""
+    else:
+        initial_code = """graph TD
+    A[Protein A] --> B(Protein B)"""
+
+    mermaid_code = st.text_area("Edit Mermaid Code:", value=initial_code, height=200, key="mermaid_editor")
+
+    st.components.v1.html(
+        f"""
+        <div class="mermaid" style="background-color: white; padding: 20px; border-radius: 10px;">
+            {mermaid_code}
+        </div>
+        <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+        </script>
+        """,
+        height=450,
+    )
+
+    st.info("💡 PhD Tip: Use this to visualize mechanistic hypotheses from AI & Logic in reproducible diagrams-as-code.")
+
 
 with main_tabs[2]:
     st.header("Publication Panels Toolkit (A/B/C/D)")
@@ -1576,7 +1625,7 @@ with main_tabs[2]:
         st.download_button("Download Full Panel Toolkit (ZIP)", combined_zip, "publication_panel_toolkit.zip", "application/zip")
 
 
-with main_tabs[2]:
+    st.markdown("---")
     st.header("Scientific Plot Generator")
     st.caption("Grouped bars, dose-response fitting, flow panel formatter, reaction scheme templates, and auto multi-panel builder.")
 
